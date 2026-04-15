@@ -62,9 +62,12 @@ constexpr uint8_t RESPONSE_COOL_22_AUTO[] = {
 constexpr size_t RESPONSE_COOL_22_AUTO_LEN = sizeof(RESPONSE_COOL_22_AUTO);
 
 // ---------------------------------------------------------------------------
-// SET_HEAT_25_5_HIGH — command sent to AC mainboard: heat mode, 25.5°C, fan speed 5 (High).
+// SET_HEAT_25_5_HIGH — command sent to AC mainboard: heat mode, 25.5°C, fan speed F5.
 // Source: tcl_climate.h set_cmd_t (raw[35]) + set_cmd_base[] (line 195) +
 //         tcl_climate.cpp build_set_cmd().
+//
+// Fan note: FanSpeed::F5 → get_resp wire code 0x03 → FAN_MAP[0x03] = 0x05 (set-cmd code).
+// This matches the old "High" fan mapping; the byte value 0x05 at [10] is unchanged.
 //
 // Derivation:
 //   Base: set_cmd_base[] = {0xBB,0x00,0x01,0x03,0x1D,0x00,0x00,0x64,0x03,0xF3,...zeros}
@@ -79,7 +82,7 @@ constexpr size_t RESPONSE_COOL_22_AUTO_LEN = sizeof(RESPONSE_COOL_22_AUTO);
 //                   (build_set_cmd(): set_cmd.temp = 15 - get_resp.temp
 //                    get_resp.temp = 25-16=9; set_cmd.temp = 15-9 = 6 = 0x06)
 //   [10]    = 0x05  fan[2:0]=0x05|vswing[5:3]=0
-//                   (build_set_cmd() FAN_MAP: get_resp.fan=0x03("5"=High)→FAN_MAP[3]=0x05)
+//                   (build_set_cmd() FAN_MAP: FanSpeed::F5→get_resp.fan=0x03→FAN_MAP[3]=0x05)
 //   [11]    = 0x00  hswing=0
 //   [12..13]= 0x00, 0x00
 //   [14]    = 0x20  half_degree[5]=1 (for the .5 in 25.5°C), all other bits 0

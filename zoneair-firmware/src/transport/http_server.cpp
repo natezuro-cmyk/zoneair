@@ -20,13 +20,17 @@ void HttpServer::begin(const AcState* state, SetCommandHandler on_set) {
   auto& server = zoneair_http_server();
 
   server.on("/state", HTTP_GET, [state](AsyncWebServerRequest* req){
-    StaticJsonDocument<256> doc;
+    StaticJsonDocument<384> doc;
     doc["online"]      = state->valid;
     doc["power"]       = state->power;
     doc["mode"]        = (int)state->mode;
     doc["fan"]         = (int)state->fan;
     doc["setpoint_c"]  = state->setpoint_c;
     doc["indoor_c"]    = state->indoor_temp_c;
+    doc["eco"]         = state->eco;
+    doc["turbo"]       = state->turbo;
+    doc["mute"]        = state->mute;
+    doc["vswing_pos"]  = state->vswing_pos;
     String body; serializeJson(doc, body);
     auto* r = req->beginResponse(200, "application/json", body);
     addCors(r); req->send(r);
@@ -41,7 +45,7 @@ void HttpServer::begin(const AcState* state, SetCommandHandler on_set) {
     [](AsyncWebServerRequest* req){},
     nullptr,
     [state, on_set](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t, size_t){
-      StaticJsonDocument<256> doc;
+      StaticJsonDocument<384> doc;
       if (deserializeJson(doc, data, len)) {
         auto* r = req->beginResponse(400, "application/json", "{\"error\":\"bad json\"}");
         addCors(r); req->send(r); return;
@@ -51,6 +55,10 @@ void HttpServer::begin(const AcState* state, SetCommandHandler on_set) {
       if (doc.containsKey("mode"))       desired.mode       = (Mode)(int)doc["mode"];
       if (doc.containsKey("fan"))        desired.fan        = (FanSpeed)(int)doc["fan"];
       if (doc.containsKey("setpoint_c")) desired.setpoint_c = doc["setpoint_c"];
+      if (doc.containsKey("eco"))        desired.eco        = doc["eco"];
+      if (doc.containsKey("turbo"))      desired.turbo      = doc["turbo"];
+      if (doc.containsKey("mute"))       desired.mute       = doc["mute"];
+      if (doc.containsKey("vswing_pos")) desired.vswing_pos = (uint8_t)(int)doc["vswing_pos"];
       on_set(desired);
       auto* r = req->beginResponse(200, "application/json", "{\"ok\":true}");
       addCors(r); req->send(r);

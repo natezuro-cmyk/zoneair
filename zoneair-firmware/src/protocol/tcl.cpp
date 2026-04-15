@@ -99,24 +99,78 @@ size_t TclProtocol::buildSet(const AcState& desired, uint8_t* out, size_t out_ca
     }
   }
 
-  // ---- byte[10]: fan ----
-  // bits[2:0] = mapped fan code.
-  // Source: tcl_climate.cpp build_set_cmd() lines 126-137 FAN_MAP.
-  // get_resp fan codes → set_cmd fan codes:
-  //   Auto(0x00)→0x00 | Low(0x01)→0x02 | Med(0x02)→0x03
-  //   High(0x03)→0x05 | Low2(0x04)→0x06 | High2(0x05)→0x07
-  // For our enum: Auto→0x00, Low→0x02 (FAN_MAP[1]), Med→0x03 (FAN_MAP[2]),
-  //   High→0x05 (FAN_MAP[3]) — fixture byte[10]=0x05 confirms High→0x05.
+  // ---- byte[7]: eco bit ----
+  // bit7 = eco.  Source: tcl_climate.h set_cmd_t data.eco (bit7 of byte7), line 133.
+  //              tcl_climate.cpp build_set_cmd() line 104 (eco hardcoded 0 in reference;
+  //              we honour desired.eco).
+  if (desired.eco) {
+    out[7] |= 0x80;
+  } else {
+    out[7] &= ~0x80;
+  }
+
+  // ---- byte[8]: turbo + mute bits ----
+  // bit6 = turbo, bit7 = mute.
+  // Source: tcl_climate.h set_cmd_t data.turbo (bit6 byte8) line 137,
+  //         data.mute (bit7 byte8) line 138.
+  //         tcl_climate.cpp build_set_cmd() lines 105-106.
+  if (desired.turbo) {
+    out[8] |= 0x40;
+  } else {
+    out[8] &= ~0x40;
+  }
+  if (desired.mute) {
+    out[8] |= 0x80;
+  } else {
+    out[8] &= ~0x80;
+  }
+
+  // ---- byte[10]: fan (bits[2:0]) and vswing enable (bits[5:3]) ----
+  // Fan mapping via FAN_MAP (tcl_climate.cpp build_set_cmd() lines 126-137).
+  // AcState fan enum → get_resp wire code → set_cmd wire code:
+  //   Auto(0)→0x00→0x00 | F1(1)→0x01→0x02 | F2(2)→0x04→0x06
+  //   F3(3)→0x02→0x03   | F4(4)→0x05→0x07 | F5(5)→0x03→0x05
+  // Reference FAN_MAP indexed by get_resp code:
+  //   [0x00]=0x00, [0x01]=0x02, [0x02]=0x03, [0x03]=0x05, [0x04]=0x06, [0x05]=0x07
   {
     uint8_t fan_code;
     switch (desired.fan) {
-      case FanSpeed::Auto: fan_code = 0x00; break;  // FAN_MAP[0]
-      case FanSpeed::Low:  fan_code = 0x02; break;  // FAN_MAP[1]
-      case FanSpeed::Med:  fan_code = 0x03; break;  // FAN_MAP[2]
-      case FanSpeed::High: fan_code = 0x05; break;  // FAN_MAP[3] — fixture confirmed
+      case FanSpeed::Auto: fan_code = 0x00; break;  // FAN_MAP[0x00]
+      case FanSpeed::F1:   fan_code = 0x02; break;  // FAN_MAP[0x01]
+      case FanSpeed::F2:   fan_code = 0x06; break;  // FAN_MAP[0x04]
+      case FanSpeed::F3:   fan_code = 0x03; break;  // FAN_MAP[0x02]
+      case FanSpeed::F4:   fan_code = 0x07; break;  // FAN_MAP[0x05]
+      case FanSpeed::F5:   fan_code = 0x05; break;  // FAN_MAP[0x03] — fixture confirmed
       default:             fan_code = 0x00; break;
     }
     out[10] = (out[10] & 0xF8) | (fan_code & 0x07);
+  }
+
+  // ---- vswing enable (byte[10] bits[5:3]) and vswing_fix/vswing_mv (byte[32]) ----
+  // Source: tcl_climate.h set_cmd_t data.vswing (bits[5:3] byte10), line 144.
+  //         data.vswing_fix (bits[2:0] byte32) line 180, data.vswing_mv (bits[4:3] byte32) line 181.
+  //         tcl_climate.cpp build_set_cmd() lines 140-148, control_vertical_swing() lines 175-196.
+  // vswing_pos encoding: 0=Last, 1=Fix top, 2=Fix upper, 3=Fix mid,
+  //   4=Fix lower, 5=Fix bottom, 6=Move full, 7=Move upper, 8=Move lower.
+  {
+    uint8_t vswing_en  = 0;
+    uint8_t vswing_fix = 0;
+    uint8_t vswing_mv  = 0;
+    switch (desired.vswing_pos) {
+      case 1: vswing_fix = 0x01; break;  // Fix top
+      case 2: vswing_fix = 0x02; break;  // Fix upper
+      case 3: vswing_fix = 0x03; break;  // Fix mid
+      case 4: vswing_fix = 0x04; break;  // Fix lower
+      case 5: vswing_fix = 0x05; break;  // Fix bottom
+      case 6: vswing_mv  = 0x01; vswing_en = 0x07; break;  // Move full
+      case 7: vswing_mv  = 0x02; vswing_en = 0x07; break;  // Move upper
+      case 8: vswing_mv  = 0x03; vswing_en = 0x07; break;  // Move lower
+      default: break;  // 0 = Last — leave fix/mv/en at 0
+    }
+    // byte[10] bits[5:3] = vswing enable field (0x07 when moving, 0 when fixed/off)
+    out[10] = (out[10] & 0xC7) | ((vswing_en & 0x07) << 3);
+    // byte[32] bits[2:0] = vswing_fix, bits[4:3] = vswing_mv
+    out[32] = (out[32] & 0xE0) | (vswing_fix & 0x07) | ((vswing_mv & 0x03) << 3);
   }
 
   // ---- byte[34]: XOR checksum ----
@@ -147,10 +201,13 @@ bool TclProtocol::parseState(const uint8_t* in, size_t in_len, AcState& state) {
   if (tcl_xor_checksum(in, in_len - 1) != in[in_len - 1]) return false;
 
   // ---- Byte 7 ----
-  // Bits [3:0] = mode, bit [4] = power.
-  // Source: tcl_climate.h get_cmd_resp_t data.mode (4-bit), data.power (1-bit).
+  // Bits [3:0] = mode, bit [4] = power, bit [6] = eco, bit [7] = turbo.
+  // Source: tcl_climate.h get_cmd_resp_t data.mode (4-bit) line 31,
+  //         data.power (bit4) line 32, data.eco (bit6) line 34, data.turbo (bit7) line 35.
   uint8_t mode_raw  = in[7] & 0x0F;
   bool    power     = (in[7] >> 4) & 0x01;
+  bool    eco       = (in[7] >> 6) & 0x01;
+  bool    turbo     = (in[7] >> 7) & 0x01;
 
   // ---- Byte 8 ----
   // Bits [3:0] = temp field, bits [6:4] = fan.
@@ -187,27 +244,57 @@ bool TclProtocol::parseState(const uint8_t* in, size_t in_len, AcState& state) {
     }
   }
 
+  // ---- Byte 33 ----
+  // bit [7] = mute.
+  // Source: tcl_climate.h get_cmd_resp_t data.mute (bit7 byte33) line 74.
+  //         tcl_climate.cpp loop() line 447 (mute check before fan mode decode).
+  bool mute = (in[33] >> 7) & 0x01;
+
+  // ---- Byte 51 ----
+  // bits [2:0] = vswing_fix, bits [4:3] = vswing_mv.
+  // Source: tcl_climate.h get_cmd_resp_t data.vswing_fix (bits[2:0] byte51) line 96,
+  //         data.vswing_mv (bits[4:3] byte51) line 97.
+  //         tcl_climate.cpp loop() lines 472-480 (set_vswing_pos decode).
+  uint8_t vswing_fix = in[51] & 0x07;
+  uint8_t vswing_mv  = (in[51] >> 3) & 0x03;
+
+  uint8_t vswing_pos;
+  if      (vswing_mv  == 0x01) vswing_pos = 6;  // Move full
+  else if (vswing_mv  == 0x02) vswing_pos = 7;  // Move upper
+  else if (vswing_mv  == 0x03) vswing_pos = 8;  // Move lower
+  else if (vswing_fix == 0x01) vswing_pos = 1;  // Fix top
+  else if (vswing_fix == 0x02) vswing_pos = 2;  // Fix upper
+  else if (vswing_fix == 0x03) vswing_pos = 3;  // Fix mid
+  else if (vswing_fix == 0x04) vswing_pos = 4;  // Fix lower
+  else if (vswing_fix == 0x05) vswing_pos = 5;  // Fix bottom
+  else                          vswing_pos = 0;  // Last (no swing position set)
+
   // ---- Fan mapping ----
   // Source: tcl_climate.cpp loop() lines 433-440 FAN_MODE_MAP.
-  // Reference codes: 0x00=Auto, 0x01="1"(Low), 0x04="2"(Low), 0x02="3"(Med),
-  //                  0x05="4"(High), 0x03="5"(High).
+  // Reference wire codes: 0x00=Auto("Automatic"), 0x01=F1("1"), 0x04=F2("2"),
+  //                       0x02=F3("3"), 0x05=F4("4"), 0x03=F5("5").
+  // turbo/mute take priority over fan code per loop() lines 444-458.
   FanSpeed fan;
   switch (fan_raw) {
     case 0x00: fan = FanSpeed::Auto; break;
-    case 0x01: fan = FanSpeed::Low;  break;
-    case 0x04: fan = FanSpeed::Low;  break;
-    case 0x02: fan = FanSpeed::Med;  break;
-    case 0x05: fan = FanSpeed::High; break;
-    case 0x03: fan = FanSpeed::High; break;
+    case 0x01: fan = FanSpeed::F1;   break;
+    case 0x04: fan = FanSpeed::F2;   break;
+    case 0x02: fan = FanSpeed::F3;   break;
+    case 0x05: fan = FanSpeed::F4;   break;
+    case 0x03: fan = FanSpeed::F5;   break;
     default:   fan = FanSpeed::Auto; break;  // unknown → Auto, still accept frame
   }
 
-  state.power        = power;
-  state.mode         = mode;
-  state.fan          = fan;
-  state.setpoint_c   = setpoint;
+  state.power         = power;
+  state.mode          = mode;
+  state.fan           = fan;
+  state.setpoint_c    = setpoint;
   state.indoor_temp_c = indoor_temp;
-  state.valid        = true;
+  state.eco           = eco;
+  state.turbo         = turbo;
+  state.mute          = mute;
+  state.vswing_pos    = vswing_pos;
+  state.valid         = true;
   return true;
 }
 

@@ -13,13 +13,17 @@ void WsServer::begin() {
 }
 
 void WsServer::pushState(const AcState& s) {
-  StaticJsonDocument<256> doc;
+  StaticJsonDocument<384> doc;
   doc["online"]     = s.valid;
   doc["power"]      = s.power;
   doc["mode"]       = (int)s.mode;
   doc["fan"]        = (int)s.fan;
   doc["setpoint_c"] = s.setpoint_c;
   doc["indoor_c"]   = s.indoor_temp_c;
+  doc["eco"]        = s.eco;
+  doc["turbo"]      = s.turbo;
+  doc["mute"]       = s.mute;
+  doc["vswing_pos"] = s.vswing_pos;
   String body; serializeJson(doc, body);
   ws.textAll(body);
 }
