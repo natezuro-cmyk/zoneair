@@ -4,6 +4,8 @@
 #include "src/protocol/tcl.h"
 #include "src/uart_link.h"
 #include "src/transport/http_server.h"
+#include "src/transport/ws_server.h"
+#include "src/discovery/mdns.h"
 
 using namespace zoneair;
 
@@ -19,6 +21,8 @@ static constexpr uint32_t QUERY_TIMEOUT_MS = 300;
 UartLink uart;
 AcState  ac{};
 HttpServer http;
+WsServer ws;
+static const char* UNIT_SLUG = "test";
 
 static void sendSet(const AcState& desired) {
   uint8_t sbuf[64];
@@ -57,6 +61,7 @@ static void pollOnce() {
   if (TclProtocol::parseState(rbuf, rn, ac)) {
     Serial.printf("[poll] mode=%d set=%.1f indoor=%.1f power=%d fan=%d\n",
       (int)ac.mode, ac.setpoint_c, ac.indoor_temp_c, ac.power, (int)ac.fan);
+    ws.pushState(ac);
   } else {
     Serial.printf("[poll] parse fail (%u bytes)\n", (unsigned)rn);
   }
@@ -70,6 +75,8 @@ void setup() {
   connectWifi();
   http.begin(&ac, sendSet);
   Serial.println("[http] started on port 80");
+  ws.begin();
+  startMdns(UNIT_SLUG);
 }
 
 void loop() {
