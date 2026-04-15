@@ -45,10 +45,24 @@ static int test_parseState_rejects_bad_checksum() {
   return 0;
 }
 
+static int test_buildSet_heat_25_5_high() {
+  AcState desired{};
+  desired.power = true;
+  desired.mode = Mode::Heat;
+  desired.fan = FanSpeed::High;
+  desired.setpoint_c = 25.5f;
+  uint8_t buf[64];
+  size_t n = TclProtocol::buildSet(desired, buf, sizeof(buf));
+  EXPECT(n == fixtures::SET_HEAT_25_5_HIGH_LEN);
+  EXPECT(std::memcmp(buf, fixtures::SET_HEAT_25_5_HIGH, n) == 0);
+  return 0;
+}
+
 int main() {
   if (test_buildQuery_matches_fixture()) return 1;
   if (test_parseState_cool_22_auto()) return 1;
   if (test_parseState_rejects_bad_checksum()) return 1;
+  if (test_buildSet_heat_25_5_high()) return 1;
   std::printf("OK\n");
   return 0;
 }
