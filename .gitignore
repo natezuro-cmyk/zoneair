@@ -1,0 +1,16 @@
+# build artifacts
+*.o
+*.d
+*.dSYM/
+zoneair-firmware/test/test_tcl_protocol
+zoneair-firmware/build/
+
+# editor
+.vscode/
+.idea/
+.DS_Store
+
+# arduino
+*.bin
+*.elf
+*.map
