@@ -1,6 +1,7 @@
 #include "http_server.h"
 #include <ESPAsyncWebServer.h>
 #include <ArduinoJson.h>
+#include <Update.h>
 
 namespace zoneair {
 
@@ -53,6 +54,33 @@ void HttpServer::begin(const AcState* state, SetCommandHandler on_set) {
       on_set(desired);
       auto* r = req->beginResponse(200, "application/json", "{\"ok\":true}");
       addCors(r); req->send(r);
+    });
+
+  // OTA: raw binary in POST body. Upload with:
+  //   curl --data-binary @firmware.bin -H 'Content-Type: application/octet-stream' \
+  //        http://<host>/update
+  server.on("/update", HTTP_POST,
+    [](AsyncWebServerRequest* req){
+      bool ok = !Update.hasError() && Update.isFinished();
+      auto* r = req->beginResponse(ok ? 200 : 500, "text/plain", ok ? "OK\n" : "FAIL\n");
+      r->addHeader("Connection", "close");
+      addCors(r);
+      req->send(r);
+      if (ok) { delay(200); ESP.restart(); }
+    },
+    nullptr,
+    [](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total){
+      if (index == 0) {
+        Serial.printf("[ota] start total=%u\n", (unsigned)total);
+        if (!Update.begin(total > 0 ? total : UPDATE_SIZE_UNKNOWN)) {
+          Update.printError(Serial);
+        }
+      }
+      if (Update.write(data, len) != len) Update.printError(Serial);
+      if (index + len == total) {
+        if (Update.end(true)) Serial.printf("[ota] done %u bytes\n", (unsigned)(index + len));
+        else Update.printError(Serial);
+      }
     });
 
   server.begin();
