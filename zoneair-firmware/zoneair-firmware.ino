@@ -3,6 +3,7 @@
 #include "src/state/ac_state.h"
 #include "src/protocol/tcl.h"
 #include "src/uart_link.h"
+#include "src/transport/http_server.h"
 
 using namespace zoneair;
 
@@ -17,6 +18,16 @@ static constexpr uint32_t QUERY_TIMEOUT_MS = 300;
 
 UartLink uart;
 AcState  ac{};
+HttpServer http;
+
+static void sendSet(const AcState& desired) {
+  uint8_t sbuf[64];
+  size_t n = TclProtocol::buildSet(desired, sbuf, sizeof(sbuf));
+  if (n == 0) { Serial.println("[set] encode failed"); return; }
+  uart.flushInput();
+  uart.write(sbuf, n);
+  Serial.printf("[set] sent %u bytes\n", (unsigned)n);
+}
 
 static void connectWifi() {
   WiFi.mode(WIFI_STA);
@@ -57,6 +68,8 @@ void setup() {
   Serial.println("[zoneair] boot");
   uart.begin(RX_PIN, TX_PIN, TCL_BAUD);
   connectWifi();
+  http.begin(&ac, sendSet);
+  Serial.println("[http] started on port 80");
 }
 
 void loop() {
