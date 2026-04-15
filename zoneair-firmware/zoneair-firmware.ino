@@ -12,8 +12,8 @@ using namespace zoneair;
 static const char* WIFI_SSID = "REPLACE_WITH_HOME_SSID";
 static const char* WIFI_PASS = "REPLACE_WITH_HOME_PASS";
 
-static constexpr int RX_PIN = 17;
-static constexpr int TX_PIN = 18;
+static constexpr int RX_PIN = 44;  // SuperMini silkscreen "RX" — wired to AC's TX
+static constexpr int TX_PIN = 43;  // SuperMini silkscreen "TX" — wired to AC's RX
 static constexpr uint32_t TCL_BAUD = 9600;
 static constexpr uint32_t POLL_INTERVAL_MS = 3000;
 static constexpr uint32_t QUERY_TIMEOUT_MS = 300;
