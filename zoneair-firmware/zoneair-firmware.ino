@@ -6,10 +6,11 @@
 #include "src/transport/http_server.h"
 #include "src/transport/ws_server.h"
 #include "src/discovery/mdns.h"
-#include "src/state/nvs_store.h"
-#include "src/provisioning/ble_prov.h"
 
 using namespace zoneair;
+
+static const char* WIFI_SSID = "REPLACE_WITH_HOME_SSID";
+static const char* WIFI_PASS = "REPLACE_WITH_HOME_PASS";
 
 static constexpr int RX_PIN = 44;  // SuperMini silkscreen "RX" — wired to AC's TX
 static constexpr int TX_PIN = 43;  // SuperMini silkscreen "TX" — wired to AC's RX
@@ -21,9 +22,7 @@ UartLink uart;
 AcState  ac{};
 HttpServer http;
 WsServer ws;
-NvsStore nvs;
-BleProvisioner prov;
-static String unit_slug = "unit";
+static const char* UNIT_SLUG = "test";
 
 static void sendSet(const AcState& desired) {
   uint8_t sbuf[64];
@@ -34,10 +33,10 @@ static void sendSet(const AcState& desired) {
   Serial.printf("[set] sent %u bytes\n", (unsigned)n);
 }
 
-static bool connectWifi(const String& ssid, const String& pass) {
+static void connectWifi() {
   WiFi.mode(WIFI_STA);
-  WiFi.begin(ssid.c_str(), pass.c_str());
-  Serial.printf("[wifi] connecting to %s\n", ssid.c_str());
+  WiFi.begin(WIFI_SSID, WIFI_PASS);
+  Serial.printf("[wifi] connecting to %s\n", WIFI_SSID);
   uint32_t deadline = millis() + 30000;
   while (WiFi.status() != WL_CONNECTED && (int32_t)(deadline - millis()) > 0) {
     delay(250);
@@ -46,10 +45,9 @@ static bool connectWifi(const String& ssid, const String& pass) {
   Serial.println();
   if (WiFi.status() == WL_CONNECTED) {
     Serial.printf("[wifi] ip=%s\n", WiFi.localIP().toString().c_str());
-    return true;
+  } else {
+    Serial.println("[wifi] FAILED");
   }
-  Serial.println("[wifi] FAILED");
-  return false;
 }
 
 static void pollOnce() {
@@ -74,36 +72,14 @@ void setup() {
   delay(1000);
   Serial.println("[zoneair] boot");
   uart.begin(RX_PIN, TX_PIN, TCL_BAUD);
-
-  auto cfg = nvs.load();
-  if (!cfg.valid) {
-    Serial.println("[zoneair] no creds — entering BLE provisioning");
-    prov.begin("ZONEAIR123", [](const String& ssid, const String& pass, const String& slug){
-      NvsStore s;
-      s.save(ssid, pass, slug);
-      Serial.println("[prov] saved, restarting");
-      delay(500);
-      ESP.restart();
-    });
-    return;
-  }
-
-  if (!connectWifi(cfg.ssid, cfg.pass)) {
-    Serial.println("[zoneair] wifi failed — clearing NVS to re-provision on next boot");
-    nvs.clear();
-    delay(500);
-    ESP.restart();
-  }
-  unit_slug = cfg.slug.length() > 0 ? cfg.slug : String("unit");
-
+  connectWifi();
   http.begin(&ac, sendSet);
   Serial.println("[http] started on port 80");
   ws.begin();
-  startMdns(unit_slug.c_str());
+  startMdns(UNIT_SLUG);
 }
 
 void loop() {
-  if (prov.isProvisioning()) { delay(50); return; }
   static uint32_t next = 0;
   if ((int32_t)(millis() - next) >= 0) {
     next = millis() + POLL_INTERVAL_MS;
