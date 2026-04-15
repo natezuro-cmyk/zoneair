@@ -1,12 +1,69 @@
 #include <Arduino.h>
+#include <WiFi.h>
+#include "src/state/ac_state.h"
+#include "src/protocol/tcl.h"
+#include "src/uart_link.h"
+
+using namespace zoneair;
+
+static const char* WIFI_SSID = "REPLACE_WITH_HOME_SSID";
+static const char* WIFI_PASS = "REPLACE_WITH_HOME_PASS";
+
+static constexpr int RX_PIN = 17;
+static constexpr int TX_PIN = 18;
+static constexpr uint32_t TCL_BAUD = 9600;
+static constexpr uint32_t POLL_INTERVAL_MS = 3000;
+static constexpr uint32_t QUERY_TIMEOUT_MS = 300;
+
+UartLink uart;
+AcState  ac{};
+
+static void connectWifi() {
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(WIFI_SSID, WIFI_PASS);
+  Serial.printf("[wifi] connecting to %s\n", WIFI_SSID);
+  uint32_t deadline = millis() + 30000;
+  while (WiFi.status() != WL_CONNECTED && (int32_t)(deadline - millis()) > 0) {
+    delay(250);
+    Serial.print('.');
+  }
+  Serial.println();
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.printf("[wifi] ip=%s\n", WiFi.localIP().toString().c_str());
+  } else {
+    Serial.println("[wifi] FAILED");
+  }
+}
+
+static void pollOnce() {
+  uint8_t qbuf[16];
+  size_t qn = TclProtocol::buildQuery(qbuf, sizeof(qbuf));
+  uart.flushInput();
+  uart.write(qbuf, qn);
+  uint8_t rbuf[128];
+  size_t rn = uart.readWithTimeout(rbuf, sizeof(rbuf), QUERY_TIMEOUT_MS);
+  if (rn == 0) { Serial.println("[poll] no response"); return; }
+  if (TclProtocol::parseState(rbuf, rn, ac)) {
+    Serial.printf("[poll] mode=%d set=%.1f indoor=%.1f power=%d fan=%d\n",
+      (int)ac.mode, ac.setpoint_c, ac.indoor_temp_c, ac.power, (int)ac.fan);
+  } else {
+    Serial.printf("[poll] parse fail (%u bytes)\n", (unsigned)rn);
+  }
+}
 
 void setup() {
   Serial.begin(115200);
   delay(1000);
   Serial.println("[zoneair] boot");
+  uart.begin(RX_PIN, TX_PIN, TCL_BAUD);
+  connectWifi();
 }
 
 void loop() {
-  delay(1000);
-  Serial.println("[zoneair] alive");
+  static uint32_t next = 0;
+  if ((int32_t)(millis() - next) >= 0) {
+    next = millis() + POLL_INTERVAL_MS;
+    pollOnce();
+  }
+  delay(10);
 }
