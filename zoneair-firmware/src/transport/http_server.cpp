@@ -25,7 +25,7 @@ void HttpServer::begin(const AcState* state, SetCommandHandler on_set) {
     doc["power"]       = state->power;
     doc["mode"]        = (int)state->mode;
     doc["fan"]         = (int)state->fan;
-    doc["setpoint_f"]  = state->setpoint_f;
+    doc["setpoint_c"]  = state->setpoint_c;
     doc["indoor_c"]    = state->indoor_temp_c;
     doc["eco"]         = state->eco;
     doc["turbo"]       = state->turbo;
@@ -54,12 +54,7 @@ void HttpServer::begin(const AcState* state, SetCommandHandler on_set) {
       if (doc.containsKey("power"))      desired.power      = doc["power"];
       if (doc.containsKey("mode"))       desired.mode       = (Mode)(int)doc["mode"];
       if (doc.containsKey("fan"))        desired.fan        = (FanSpeed)(int)doc["fan"];
-      if (doc.containsKey("setpoint_f")) {
-        int sf = (int)doc["setpoint_f"];
-        if (sf < 61) sf = 61;
-        if (sf > 88) sf = 88;
-        desired.setpoint_f = sf;
-      }
+      if (doc.containsKey("setpoint_c")) desired.setpoint_c = doc["setpoint_c"];
       if (doc.containsKey("eco"))        desired.eco        = doc["eco"];
       if (doc.containsKey("turbo"))      desired.turbo      = doc["turbo"];
       if (doc.containsKey("mute"))       desired.mute       = doc["mute"];

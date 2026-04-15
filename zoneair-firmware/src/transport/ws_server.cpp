@@ -18,7 +18,7 @@ void WsServer::pushState(const AcState& s) {
   doc["power"]      = s.power;
   doc["mode"]       = (int)s.mode;
   doc["fan"]        = (int)s.fan;
-  doc["setpoint_f"] = s.setpoint_f;
+  doc["setpoint_c"] = s.setpoint_c;
   doc["indoor_c"]   = s.indoor_temp_c;
   doc["eco"]        = s.eco;
   doc["turbo"]      = s.turbo;

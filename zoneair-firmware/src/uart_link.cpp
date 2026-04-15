@@ -3,7 +3,7 @@
 namespace zoneair {
 
 void UartLink::begin(int rx_pin, int tx_pin, uint32_t baud) {
-  Serial1.begin(baud, SERIAL_8N1, rx_pin, tx_pin);
+  Serial1.begin(baud, SERIAL_8E1, rx_pin, tx_pin);
   while (Serial1.available()) Serial1.read();
 }
 
@@ -14,9 +14,6 @@ void UartLink::write(const uint8_t* data, size_t len) {
 
 size_t UartLink::readWithTimeout(uint8_t* buf, size_t cap, uint32_t timeout_ms) {
   size_t n = 0;
-  // Always drain whatever is already buffered.
-  while (n < cap && Serial1.available()) buf[n++] = Serial1.read();
-  if (timeout_ms == 0) return n;
   uint32_t deadline = millis() + timeout_ms;
   while (n < cap && (int32_t)(deadline - millis()) > 0) {
     if (Serial1.available()) {
