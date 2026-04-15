@@ -1,0 +1,18 @@
+---
+triple:          'arm64-apple-darwin'
+binary-path:     test_tcl_protocol
+relocations:
+  - { offsetInCU: 0x26, offset: 0x26, size: 0x8, addend: 0x0, symName: _main, symObjAddr: 0x0, symBinAddr: 0x1000033BC, symSize: 0x94 }
+  - { offsetInCU: 0x68, offset: 0x68, size: 0x8, addend: 0x0, symName: __ZN7zoneair8fixturesL5QUERYE, symObjAddr: 0x736, symBinAddr: 0x100003F4A, symSize: 0x0 }
+  - { offsetInCU: 0x8D, offset: 0x8D, size: 0x8, addend: 0x0, symName: __ZN7zoneair8fixturesL21RESPONSE_COOL_22_AUTOE, symObjAddr: 0x73E, symBinAddr: 0x100003F52, symSize: 0x0 }
+  - { offsetInCU: 0xBB9, offset: 0xBB9, size: 0x8, addend: 0x0, symName: _main, symObjAddr: 0x0, symBinAddr: 0x1000033BC, symSize: 0x94 }
+  - { offsetInCU: 0xBD2, offset: 0xBD2, size: 0x8, addend: 0x0, symName: __ZL31test_buildQuery_matches_fixturev, symObjAddr: 0x94, symBinAddr: 0x100003450, symSize: 0x148 }
+  - { offsetInCU: 0xC0C, offset: 0xC0C, size: 0x8, addend: 0x0, symName: __ZL28test_parseState_cool_22_autov, symObjAddr: 0x1DC, symBinAddr: 0x100003598, symSize: 0x2F4 }
+  - { offsetInCU: 0xC46, offset: 0xC46, size: 0x8, addend: 0x0, symName: __ZL36test_parseState_rejects_bad_checksumv, symObjAddr: 0x4D0, symBinAddr: 0x10000388C, symSize: 0x14C }
+  - { offsetInCU: 0x26, offset: 0xCCC, size: 0x8, addend: 0x0, symName: __ZN7zoneair11TclProtocol10buildQueryEPhm, symObjAddr: 0x0, symBinAddr: 0x1000039D8, symSize: 0x84 }
+  - { offsetInCU: 0xA9, offset: 0xD4F, size: 0x8, addend: 0x0, symName: __ZN7zoneairL16tcl_xor_checksumEPKhm, symObjAddr: 0x84, symBinAddr: 0x100003A5C, symSize: 0x68 }
+  - { offsetInCU: 0x153, offset: 0xDF9, size: 0x8, addend: 0x0, symName: __ZN7zoneair11TclProtocol10buildQueryEPhm, symObjAddr: 0x0, symBinAddr: 0x1000039D8, symSize: 0x84 }
+  - { offsetInCU: 0x174, offset: 0xE1A, size: 0x8, addend: 0x0, symName: __ZZN7zoneair11TclProtocol10buildQueryEPhmE8TEMPLATE, symObjAddr: 0x41C, symBinAddr: 0x100003F8F, symSize: 0x0 }
+  - { offsetInCU: 0x4C2, offset: 0x1168, size: 0x8, addend: 0x0, symName: __ZN7zoneair11TclProtocol8buildSetERKNS_7AcStateEPhm, symObjAddr: 0xEC, symBinAddr: 0x100003AC4, symSize: 0x1C }
+  - { offsetInCU: 0x4F6, offset: 0x119C, size: 0x8, addend: 0x0, symName: __ZN7zoneair11TclProtocol10parseStateEPKhmRNS_7AcStateE, symObjAddr: 0x108, symBinAddr: 0x100003AE0, symSize: 0x2E8 }
+...
