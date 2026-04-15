@@ -1,0 +1,3 @@
+[submodule "zoneair-firmware/references/lNikazzzl-tcl_ac_esphome"]
+	path = zoneair-firmware/references/lNikazzzl-tcl_ac_esphome
+	url = https://github.com/lNikazzzl/tcl_ac_esphome
