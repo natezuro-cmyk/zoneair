@@ -18,11 +18,20 @@ struct AcState {
   Mode mode;
   FanSpeed fan;
   float setpoint_c;
+  int   setpoint_f;       // if > 0 and use_fahrenheit, send native F via byte[12]=0x80
+  bool  use_fahrenheit;
   float indoor_temp_c;
   bool eco;         // eco/night bit — get byte7[6], set byte7[7]
   bool turbo;       // turbo burst  — get byte7[7], set byte8[6]
   bool mute;        // quiet mode   — get byte33[7], set byte8[7]
   uint8_t vswing_pos; // 0..8, see comment above
+  bool    display;    // panel LED display on/off — set byte[7] bit 6
+  bool    beep;       // beep/buzzer on/off       — set byte[7] bit 5
+  bool    off_timer_en;    // byte[7] bit 3 (junkfix comment, untested for LED)
+  bool    on_timer_en;     // byte[7] bit 4 (junkfix comment, untested for LED)
+  bool    timer_indicator; // byte[10] bit 6 (junkfix's "timerindicator?")
+  uint8_t off_timer_hours; // byte 13, range 0-24, per /Users/Ben/zone-air/bb_protocol.h:204
+  uint8_t on_timer_hours;  // byte 14, range 0-24, per /Users/Ben/zone-air/bb_protocol.h:205
   bool valid;
 };
 

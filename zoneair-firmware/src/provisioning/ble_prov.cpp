@@ -66,7 +66,7 @@ void BleProvisioner::begin(const String& pop, OnProvisioned cb) {
   uint8_t mac[6] = {0};
   esp_wifi_get_mac(WIFI_IF_STA, mac);
   static char service_name[20];
-  snprintf(service_name, sizeof(service_name), "ZoneAir-%02X%02X", mac[4], mac[5]);
+  snprintf(service_name, sizeof(service_name), "PROV_ZA_%02X%02X", mac[4], mac[5]);
 
   Serial.printf("[prov] starting BLE provisioning as %s (PoP=%s)\n", service_name, pop.c_str());
 

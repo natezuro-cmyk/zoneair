@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <WiFi.h>
+#include <esp_mac.h>
 #include "src/state/ac_state.h"
 #include "src/protocol/tcl.h"
 #include "src/uart_link.h"
@@ -7,7 +8,7 @@
 #include "src/transport/ws_server.h"
 #include "src/discovery/mdns.h"
 #include "src/state/nvs_store.h"
-#include "src/provisioning/ble_prov.h"
+#include "src/provisioning/softap.h"
 
 using namespace zoneair;
 
@@ -22,7 +23,7 @@ AcState  ac{};
 HttpServer http;
 WsServer ws;
 NvsStore nvs;
-BleProvisioner prov;
+SoftApProvisioner prov;
 static String unit_slug = "unit";
 
 static void sendSet(const AcState& desired) {
@@ -32,6 +33,10 @@ static void sendSet(const AcState& desired) {
   uart.flushInput();
   uart.write(sbuf, n);
   Serial.printf("[set] sent %u bytes\n", (unsigned)n);
+  // Commit write-only fields (AC doesn't echo these in its response, so the
+  // parser ignores them — stash here so the next /state poll returns truth).
+  ac.beep    = desired.beep;
+  ac.display = desired.display;
 }
 
 static bool connectWifi(const String& ssid, const String& pass) {
@@ -69,41 +74,75 @@ static void pollOnce() {
   }
 }
 
+// Boot button on GPIO 0 — long-press 5s to factory-reset (clear NVS + reboot).
+static constexpr int BOOT_BUTTON = 0;
+static constexpr uint32_t RESET_HOLD_MS = 5000;
+static uint32_t button_down_at = 0;
+
+static void factoryReset(const char* reason) {
+  Serial.printf("[reset] %s — clearing NVS and rebooting\n", reason);
+  nvs.clear();
+  delay(300);
+  ESP.restart();
+}
+
+static void checkResetButton() {
+  if (digitalRead(BOOT_BUTTON) == LOW) {
+    if (button_down_at == 0) button_down_at = millis();
+    if (millis() - button_down_at > RESET_HOLD_MS) factoryReset("boot-button long press");
+  } else {
+    button_down_at = 0;
+  }
+}
+
+static bool services_started = false;
+static void startServices(const String& slug) {
+  http.begin(&ac, sendSet);
+  Serial.println("[http] started on port 80");
+  ws.begin();
+  startMdns(slug.c_str());
+  services_started = true;
+}
+
 void setup() {
   Serial.begin(115200);
   delay(1000);
   Serial.println("[zoneair] boot");
+  pinMode(BOOT_BUTTON, INPUT_PULLUP);
   uart.begin(RX_PIN, TX_PIN, TCL_BAUD);
 
   auto cfg = nvs.load();
   if (!cfg.valid) {
-    Serial.println("[zoneair] no creds — entering BLE provisioning");
-    prov.begin("ZONEAIR123", [](const String& ssid, const String& pass, const String& slug){
-      NvsStore s;
-      s.save(ssid, pass, slug);
-      Serial.println("[prov] saved, restarting");
-      delay(1500);
+    Serial.println("[zoneair] no creds — starting SoftAP captive portal");
+    // Append last 4 MAC hex to SSID — defeats iOS captive cache and lets
+    // multiple units provision side-by-side.
+    uint8_t mac[6]; esp_read_mac(mac, ESP_MAC_WIFI_STA);
+    char ap_name[24];
+    snprintf(ap_name, sizeof(ap_name), "Z1Air-Setup-%02X%02X", mac[4], mac[5]);
+    prov.begin(ap_name, [](const String& ssid, const String& pass){
+      NvsStore s; s.save(ssid, pass, "unit");
+      Serial.println("[prov] saved, rebooting in 8s");
+      delay(8000);
       ESP.restart();
     });
-    return;  // setup() exits; loop() will idle while BLE provisioning runs
+    return;
   }
-
   if (!connectWifi(cfg.ssid, cfg.pass)) {
-    Serial.println("[zoneair] wifi failed — clearing NVS to re-provision on next boot");
-    nvs.clear();
-    delay(500);
-    ESP.restart();
+    factoryReset("WiFi connect failed");
   }
   unit_slug = cfg.slug.length() > 0 ? cfg.slug : String("unit");
-
-  http.begin(&ac, sendSet);
-  Serial.println("[http] started on port 80");
-  ws.begin();
-  startMdns(unit_slug.c_str());
+  startServices(unit_slug);
 }
 
 void loop() {
-  if (prov.isProvisioning()) { delay(50); return; }
+  checkResetButton();
+
+  if (prov.isActive()) {
+    prov.poll();
+    delay(10);
+    return;
+  }
+
   static uint32_t next = 0;
   if ((int32_t)(millis() - next) >= 0) {
     next = millis() + POLL_INTERVAL_MS;

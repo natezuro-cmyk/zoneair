@@ -2,6 +2,8 @@
 #include <ESPAsyncWebServer.h>
 #include <ArduinoJson.h>
 #include <Update.h>
+#include <Preferences.h>
+#include <WiFi.h>
 
 namespace zoneair {
 
@@ -19,6 +21,17 @@ static void addCors(AsyncWebServerResponse* r) {
 void HttpServer::begin(const AcState* state, SetCommandHandler on_set) {
   auto& server = zoneair_http_server();
 
+  server.on("/", HTTP_GET, [](AsyncWebServerRequest* req){
+    req->send(200, "text/html",
+      "<!doctype html><html><head><meta name=viewport content='width=device-width'>"
+      "<style>body{background:#0a0e14;color:#e6edf3;font-family:system-ui;padding:40px 20px;text-align:center}"
+      "h1{font-weight:500;font-size:22px}p{color:#7d8896;font-size:14px;margin:12px 0}"
+      "a{color:#3ea6ff}</style></head><body>"
+      "<h1>Z1 Air</h1><p>This unit is online.</p>"
+      "<p><a href='/state'>View state (JSON)</a></p>"
+      "</body></html>");
+  });
+
   server.on("/state", HTTP_GET, [state](AsyncWebServerRequest* req){
     StaticJsonDocument<384> doc;
     doc["online"]      = state->valid;
@@ -31,6 +44,8 @@ void HttpServer::begin(const AcState* state, SetCommandHandler on_set) {
     doc["turbo"]       = state->turbo;
     doc["mute"]        = state->mute;
     doc["vswing_pos"]  = state->vswing_pos;
+    doc["display"]     = state->display;
+    doc["beep"]        = state->beep;
     String body; serializeJson(doc, body);
     auto* r = req->beginResponse(200, "application/json", body);
     addCors(r); req->send(r);
@@ -54,15 +69,30 @@ void HttpServer::begin(const AcState* state, SetCommandHandler on_set) {
       if (doc.containsKey("power"))      desired.power      = doc["power"];
       if (doc.containsKey("mode"))       desired.mode       = (Mode)(int)doc["mode"];
       if (doc.containsKey("fan"))        desired.fan        = (FanSpeed)(int)doc["fan"];
-      if (doc.containsKey("setpoint_c")) desired.setpoint_c = doc["setpoint_c"];
+      if (doc.containsKey("setpoint_c")) { desired.setpoint_c = doc["setpoint_c"]; desired.use_fahrenheit = false; }
+      if (doc.containsKey("setpoint_f")) { desired.setpoint_f = (int)doc["setpoint_f"]; desired.use_fahrenheit = true; }
       if (doc.containsKey("eco"))        desired.eco        = doc["eco"];
       if (doc.containsKey("turbo"))      desired.turbo      = doc["turbo"];
       if (doc.containsKey("mute"))       desired.mute       = doc["mute"];
       if (doc.containsKey("vswing_pos")) desired.vswing_pos = (uint8_t)(int)doc["vswing_pos"];
+      if (doc.containsKey("display"))    desired.display    = doc["display"];
+      if (doc.containsKey("beep"))       desired.beep       = doc["beep"];
+      // timer fields removed
       on_set(desired);
       auto* r = req->beginResponse(200, "application/json", "{\"ok\":true}");
       addCors(r); req->send(r);
     });
+
+  // Factory reset: wipe BOTH our NVS namespace AND the ESP-IDF WiFi cache, reboot.
+  server.on("/factory_reset", HTTP_POST, [](AsyncWebServerRequest* req){
+    auto* r = req->beginResponse(200, "application/json", "{\"ok\":true}");
+    addCors(r); req->send(r);
+    delay(300);
+    Preferences p; p.begin("zoneair", false); p.clear(); p.end();
+    WiFi.disconnect(true, true);   // also wipes IDF saved creds
+    delay(200);
+    ESP.restart();
+  });
 
   // OTA: raw binary in POST body. Upload with:
   //   curl --data-binary @firmware.bin -H 'Content-Type: application/octet-stream' \

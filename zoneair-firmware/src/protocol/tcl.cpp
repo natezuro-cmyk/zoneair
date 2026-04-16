@@ -63,41 +63,45 @@ size_t TclProtocol::buildSet(const AcState& desired, uint8_t* out, size_t out_ca
   {
     uint8_t mode_code;
     switch (desired.mode) {
-      case Mode::Cool: mode_code = 0x03; break;  // MODE_MAP[1]
-      case Mode::Fan:  mode_code = 0x02; break;  // MODE_MAP[2]
-      case Mode::Dry:  mode_code = 0x07; break;  // MODE_MAP[3]
-      case Mode::Heat: mode_code = 0x01; break;  // MODE_MAP[4]
-      case Mode::Auto: mode_code = 0x08; break;  // MODE_MAP[5]
+      // Source: squidpickles/tuya-serial cmds - real wire captures:
+      //   "(cool, 63)" → byte[8]=0x03, "(heat, 63)" → 0x01,
+      //   "(dehumidify, 64)" → 0x02, "(fan, 79)" → 0x07, "(auto, 63)" → 0x08.
+      case Mode::Cool: mode_code = 0x03; break;
+      case Mode::Heat: mode_code = 0x01; break;
+      case Mode::Dry:  mode_code = 0x02; break;
+      case Mode::Fan:  mode_code = 0x07; break;
+      case Mode::Auto: mode_code = 0x08; break;
       default:         mode_code = 0x08; break;  // fallback Auto
     }
     out[8] = (out[8] & 0xF0) | (mode_code & 0x0F);
   }
 
-  // ---- byte[9]: temp field ----
-  // bits[3:0] = 15 - (setpoint - 16) = 31 - setpoint  (integer part only).
-  // Source: tcl_climate.cpp build_set_cmd() line 123:
-  //   set_cmd.temp = 15 - get_cmd_resp->data.temp
-  //   where get_cmd_resp->data.temp = setpoint - 16.
-  {
-    int setpoint_whole = static_cast<int>(desired.setpoint_c);  // truncate toward 0
-    int temp_field = setpoint_whole - 16;                        // get_resp encoding
-    int set_temp   = 15 - temp_field;                            // set_cmd encoding
-    out[9] = (out[9] & 0xF0) | (static_cast<uint8_t>(set_temp) & 0x0F);
+  // ---- byte[9]: temp field, byte[12]: F/C unit toggle ----
+  // C mode (byte[12] bit 7 = 0): byte[9] bits[3:0] = 15 - (setpoint - 16).
+  // F mode (byte[12] bit 7 = 1): byte[9] bits[3:0] holds an F-encoded value.
+  // F-mode encoding source: junkfix/tcl-electriq-split-ac README "[12] cf 80=f 0=c";
+  // sanyadez/tcl-ac-ukrainian "dataTX[12] = 0x00; //fahrenheit, 0x80=F, 0x00=C".
+  // ---- Setpoint encoding ----
+  // F mode (byte[12] bit 7 = 0x80): convert F to nearest 0.5°C, then encode
+  //   the same way as native Celsius. squidpickles captures confirm:
+  //   F=63→0x5E h0, F=64→0x5D h0, F=65→0x5D h1, F=66→0x5C h0, F=67→0x5C h1, ...
+  // C mode: integer Celsius from desired.setpoint_c, half-bit from frac.
+  float wire_c;
+  if (desired.use_fahrenheit && desired.setpoint_f > 0) {
+    out[12] |= 0x80;
+    float c = (desired.setpoint_f - 32) * 5.0f / 9.0f;
+    wire_c = (int)(c * 2.0f + 0.5f) / 2.0f;
+  } else {
+    out[12] &= ~0x80;
+    wire_c = desired.setpoint_c;
   }
-
-  // ---- byte[14]: half_degree bit ----
-  // bit5 = 1 if setpoint has a .5°C fractional part.
-  // Source: tcl_climate.h set_cmd_t data.half_degree bit5 of byte14, line 158.
-  //         tcl_climate.cpp build_set_cmd() line 160 (cleared by default;
-  //         caller sets it before calling build_set_cmd per ESPHome control()).
-  {
-    float frac = desired.setpoint_c - static_cast<int>(desired.setpoint_c);
-    if (frac >= 0.4f) {
-      out[14] |= 0x20;   // set bit5
-    } else {
-      out[14] &= ~0x20;  // clear bit5
-    }
-  }
+  if (wire_c < 16.0f) wire_c = 16.0f;
+  if (wire_c > 31.5f) wire_c = 31.5f;
+  int  whole    = (int)wire_c;
+  bool half     = (wire_c - whole) > 0.25f;
+  int  set_temp = 31 - whole;
+  out[9]  = (out[9] & 0xF0) | (static_cast<uint8_t>(set_temp) & 0x0F);
+  if (half) out[11] |= 0x04; else out[11] &= ~0x04;
 
   // ---- byte[7]: eco bit ----
   // bit7 = eco.  Source: tcl_climate.h set_cmd_t data.eco (bit7 of byte7), line 133.
@@ -173,6 +177,17 @@ size_t TclProtocol::buildSet(const AcState& desired, uint8_t* out, size_t out_ca
     out[32] = (out[32] & 0xE0) | (vswing_fix & 0x07) | ((vswing_mv & 0x03) << 3);
   }
 
+  // ---- byte[7] bit 6: display LED on, bit 5: beep on ----
+  // Source: squidpickles cmds — default byte[7]=0x64 has display+beep+power on.
+  // "display off" sets byte[7]=0x24 (clears 0x40); "beep off" sets 0x04 (clears 0x20).
+  if (desired.display) out[7] |= 0x40; else out[7] &= ~0x40;
+  if (desired.beep)    out[7] |= 0x20; else out[7] &= ~0x20;
+  // ---- byte[7] bit 3: off_timer_en, bit 4: on_timer_en ----
+  // Lights the AC's TIMER panel indicator. lNikazzzl tcl_climate.h set_cmd_t
+  // lines 129-130. We set/clear from app state to mirror UI scheduling.
+  // (Timer bytes intentionally left unset — couldn't reliably light the AC's
+  // TIMER LED with any documented byte combo. App handles scheduling itself.)
+
   // ---- byte[34]: XOR checksum ----
   // XOR of bytes [0..33], stored at byte [34].
   // Source: tcl_climate.cpp build_set_cmd() lines 163-167.
@@ -216,9 +231,12 @@ bool TclProtocol::parseState(const uint8_t* in, size_t in_len, AcState& state) {
   uint8_t fan_raw    = (in[8] >> 4) & 0x07;
 
   // ---- Setpoint ----
-  // target_temperature = temp_field + 16
-  // Source: tcl_climate.cpp loop() line 493.
+  // target_temperature = (temp_field + 16) + 0.5 if half-degree bit set.
+  // Half-degree bit: response byte[14] bit 5 — symmetric with cmd byte[14] bit 5.
+  // (Some captures show it at byte[11] bit 2; checking both for safety.)
+  // Setpoint includes half-degree bit at byte[11] bit 2 (real captures).
   float setpoint = static_cast<float>(temp_field + 16);
+  if ((in[11] >> 2) & 0x01) setpoint += 0.5f;
 
   // ---- Indoor temp ----
   // raw = (buffer[17] << 8) | buffer[18]
@@ -235,11 +253,12 @@ bool TclProtocol::parseState(const uint8_t* in, size_t in_len, AcState& state) {
     mode = Mode::Off;
   } else {
     switch (mode_raw) {
-      case 0x01: mode = Mode::Cool; break;
-      case 0x02: mode = Mode::Fan;  break;
-      case 0x03: mode = Mode::Dry;  break;
-      case 0x04: mode = Mode::Heat; break;
-      case 0x05: mode = Mode::Auto; break;
+      // Same code-set as buildSet (squidpickles real captures).
+      case 0x01: mode = Mode::Heat; break;
+      case 0x02: mode = Mode::Dry;  break;
+      case 0x03: mode = Mode::Cool; break;
+      case 0x07: mode = Mode::Fan;  break;
+      case 0x08: mode = Mode::Auto; break;
       default:   mode = Mode::Off;  break;  // unknown → Off, still accept frame
     }
   }
@@ -294,6 +313,8 @@ bool TclProtocol::parseState(const uint8_t* in, size_t in_len, AcState& state) {
   state.turbo         = turbo;
   state.mute          = mute;
   state.vswing_pos    = vswing_pos;
+  // Display & beep are write-only on this AC variant — keep last-sent value
+  // (committed by sendSet) so the UI toggle stays stable.
   state.valid         = true;
   return true;
 }

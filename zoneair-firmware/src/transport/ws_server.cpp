@@ -24,6 +24,8 @@ void WsServer::pushState(const AcState& s) {
   doc["turbo"]      = s.turbo;
   doc["mute"]       = s.mute;
   doc["vswing_pos"] = s.vswing_pos;
+  doc["display"]    = s.display;
+  doc["beep"]       = s.beep;
   String body; serializeJson(doc, body);
   ws.textAll(body);
 }
