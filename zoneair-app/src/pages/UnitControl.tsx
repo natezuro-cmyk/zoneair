@@ -57,7 +57,11 @@ export default function UnitControl({ unit, onBack, onDetails }: Props) {
   }
 
   const [state, setState] = useState<AcState | null>(null)
+  const [connected, setConnected] = useState(false)
   const [pending, setPending] = useState<Partial<AcState>>({})
+  const pendingTimers = useRef<Partial<Record<keyof AcState, ReturnType<typeof setTimeout>>>>({})
+  const displayFlashTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const sendRef = useRef<(patch: Partial<AcState>) => void>(() => {})
   const [offAt, setOffAt] = useState<number | null>(null)
   const [onAt,  setOnAt]  = useState<number | null>(null)
   const [, tick] = useState(0)
@@ -67,34 +71,98 @@ export default function UnitControl({ unit, onBack, onDetails }: Props) {
     const i = setInterval(() => {
       tick(x => x + 1)
       const now = Date.now()
-      if (offAt && now >= offAt) { client.sendCommand({ power: false }).catch(() => {}); setOffAt(null) }
-      if (onAt  && now >= onAt)  { client.sendCommand({ power: true  }).catch(() => {}); setOnAt(null) }
+      if (offAt && now >= offAt) { sendRef.current({ power: false }); setOffAt(null) }
+      if (onAt  && now >= onAt)  { sendRef.current({ power: true, display: true }); setOnAt(null) }
     }, 1000)
     return () => clearInterval(i)
-  }, [offAt, onAt, client])
+  }, [offAt, onAt])
 
   useEffect(() => {
     let alive = true
     let ws: WebSocket | null = null
-    client.getState().then(s => { if (alive) setState(s) }).catch(() => {})
-    try { ws = client.openSocket(s => { if (alive) setState(s) }) } catch {}
-    return () => { alive = false; ws?.close() }
+    let retryTimer: ReturnType<typeof setTimeout> | null = null
+
+    const connect = () => {
+      client.getState().then(s => { if (alive) { setState(s); setConnected(true) } }).catch(() => {})
+      try {
+        ws = client.openSocket(
+          s => { if (alive) { setState(s); setConnected(true) } },
+          () => { if (alive) { setConnected(false); retryTimer = setTimeout(connect, 3000) } }
+        )
+      } catch {}
+    }
+
+    connect()
+    return () => { alive = false; if (retryTimer) clearTimeout(retryTimer); ws?.close() }
   }, [client])
+
+  // Clean up display flash timer on unmount
+  useEffect(() => () => { if (displayFlashTimer.current) clearTimeout(displayFlashTimer.current) }, [])
 
   const view = { ...(state || {}), ...pending } as AcState
   const alertCount = state ? analyzeState(state).length : 0
 
   const send = (patch: Partial<AcState>) => {
-    setPending(p => ({ ...p, ...patch }))
-    client.sendCommand(patch as any).catch(() => {})
+    // Preserve toggle states not in this patch so intermediate WS messages don't briefly flip them
+    const preserve: Partial<AcState> = {}
+    for (const k of ['power', 'display', 'eco', 'beep'] as const) {
+      if (!(k in patch)) preserve[k] = view[k]
+    }
+
+    // If display is off and this command isn't about display or power, flash display on for 2s
+    if (!view.display && !('display' in patch) && !('power' in patch)) {
+      preserve.display = true
+      client.sendCommand({ display: true }).catch(() => {})
+      if (displayFlashTimer.current) clearTimeout(displayFlashTimer.current)
+      displayFlashTimer.current = setTimeout(() => {
+        client.sendCommand({ display: false }).catch(() => {})
+        setPending(p => ({ ...p, display: false }))
+        displayFlashTimer.current = null
+      }, 2000)
+    }
+
+    setPending(p => ({ ...p, ...preserve, ...patch }))
+
+    const keys = Object.keys(patch) as (keyof AcState)[]
+
+    // Auto-expire optimistic state after 8s so rapid/lost commands don't leave the UI stuck
+    for (const key of keys) {
+      clearTimeout(pendingTimers.current[key])
+      pendingTimers.current[key] = setTimeout(() => {
+        setPending(p => { const n = { ...p }; delete n[key]; return n })
+        delete pendingTimers.current[key]
+      }, 8000)
+    }
+
+    client.sendCommand(patch as any).catch(() => {
+      // Revert optimistic state immediately if the command fails to send
+      setPending(p => {
+        const n = { ...p }
+        for (const key of keys) {
+          clearTimeout(pendingTimers.current[key])
+          delete pendingTimers.current[key]
+          delete n[key]
+        }
+        return n
+      })
+    })
   }
+
+  // Keep sendRef current so timer callbacks always call the latest send
+  sendRef.current = send
 
   useEffect(() => {
     if (!state) return
     setPending(prev => {
       const next: Partial<AcState> = {}
       for (const k of Object.keys(prev) as (keyof AcState)[]) {
-        if (prev[k] !== (state as any)[k]) (next as any)[k] = prev[k]
+        if (prev[k] !== (state as any)[k]) {
+          (next as any)[k] = prev[k]
+        } else {
+          // WebSocket confirmed this key — cancel its expiry timer
+          clearTimeout(pendingTimers.current[k])
+          delete pendingTimers.current[k]
+        }
       }
       return next
     })
@@ -105,11 +173,6 @@ export default function UnitControl({ unit, onBack, onDetails }: Props) {
   useEffect(() => {
     if (state && targetF !== null && cToF(state.setpoint_c) === targetF) setTargetF(null)
   }, [state?.setpoint_c, targetF])
-
-  const [targetPower, setTargetPower] = useState<boolean | null>(null)
-  useEffect(() => {
-    if (state && targetPower !== null && state.power === targetPower) setTargetPower(null)
-  }, [state?.power, targetPower])
 
   if (!state) return (
     <div className="flex flex-col items-center justify-center h-full">
@@ -128,12 +191,12 @@ export default function UnitControl({ unit, onBack, onDetails }: Props) {
     setTargetF(next)
     if (sendTimerRef.current) window.clearTimeout(sendTimerRef.current)
     sendTimerRef.current = window.setTimeout(() => {
-      client.sendCommand({ setpoint_f: next } as any).catch(() => {})
+      client.sendCommand({ setpoint_f: next } as any).catch(() => { setTargetF(null) })
       sendTimerRef.current = null
     }, 250)
   }
 
-  const powerOn = targetPower ?? view.power
+  const powerOn = view.power
   const modeLabel = ['Off','Cool','Heat','Auto','Dry','Fan'][view.mode] ?? '—'
 
   return (
@@ -157,6 +220,11 @@ export default function UnitControl({ unit, onBack, onDetails }: Props) {
           )}
         </button>
       </div>
+
+      {/* Reconnecting banner */}
+      {!connected && (
+        <div className="text-xs text-center text-dim py-1 mb-1">Reconnecting…</div>
+      )}
 
       {/* Settings panel */}
       {showSettings && (
@@ -229,10 +297,7 @@ export default function UnitControl({ unit, onBack, onDetails }: Props) {
       <div className="flex-1 overflow-hidden no-scrollbar fade-up fade-up-delay-2 -mx-1 px-1">
         <div className="glass rounded-3xl p-4 space-y-0.5">
           <ControlRow label="Power">
-            <Toggle
-              on={powerOn}
-              onChange={(v) => { setTargetPower(v); client.sendCommand({ power: v }).catch(() => {}) }}
-            />
+            <Toggle on={powerOn} onChange={(v) => send({ power: v, ...(v && { display: true }) })} />
           </ControlRow>
 
           <Sep />
@@ -267,7 +332,10 @@ export default function UnitControl({ unit, onBack, onDetails }: Props) {
             <Toggle on={view.eco} onChange={(v) => send({ eco: v })} />
           </ControlRow>
           <ControlRow label="Display">
-            <Toggle on={view.display} onChange={(v) => send({ display: v })} />
+            <Toggle on={view.display} onChange={(v) => {
+              if (displayFlashTimer.current) { clearTimeout(displayFlashTimer.current); displayFlashTimer.current = null }
+              send({ display: v })
+            }} />
           </ControlRow>
           <ControlRow label="Beep">
             <Toggle on={view.beep} onChange={(v) => send({ beep: v })} />
