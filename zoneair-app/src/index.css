@@ -1,16 +1,158 @@
-@import url('https://rsms.me/inter/inter.css');
+@font-face {
+  font-family: 'Outfit';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('./assets/fonts/outfit-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Outfit';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('./assets/fonts/outfit-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --bg-primary: #08090c;
+  --bg-card: rgba(255, 255, 255, 0.04);
+  --bg-card-hover: rgba(255, 255, 255, 0.07);
+  --bg-pill: rgba(255, 255, 255, 0.06);
+  --bg-pill-active: rgba(62, 166, 255, 0.15);
+  --accent: #3ea6ff;
+  --accent-glow: rgba(62, 166, 255, 0.25);
+  --text-primary: #edf2f7;
+  --text-secondary: rgba(237, 242, 247, 0.45);
+  --text-tertiary: rgba(237, 242, 247, 0.25);
+  --border: rgba(255, 255, 255, 0.06);
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
 html, body, #root {
   height: 100%;
-  background: #0a0e14;
-  color: #e6edf3;
+  background: var(--bg-primary);
+  color: var(--text-primary);
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   margin: 0;
-  font-family: 'Inter', system-ui, sans-serif;
+  font-family: 'Outfit', system-ui, sans-serif;
+  overflow: hidden;
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 * { box-sizing: border-box; }
+
+/* Prevent pull-to-refresh and overscroll */
+body { overscroll-behavior: none; }
+
+/* Glass card effect */
+.glass {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.glass-hover:active {
+  background: var(--bg-card-hover);
+}
+
+/* Accent glow for active elements */
+.glow-accent {
+  box-shadow: 0 0 20px var(--accent-glow), 0 0 60px rgba(62, 166, 255, 0.08);
+}
+
+/* Temperature arc SVG glow */
+.arc-glow {
+  filter: drop-shadow(0 0 8px var(--accent-glow));
+}
+
+/* Smooth number transitions */
+.tabular { font-variant-numeric: tabular-nums; }
+
+/* Pill button base */
+.pill {
+  padding: 6px 14px;
+  border-radius: 9999px;
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: 0.01em;
+  transition: all 0.2s ease;
+  background: var(--bg-pill);
+  color: var(--text-secondary);
+  border: 1px solid transparent;
+}
+.pill:active { transform: scale(0.96); }
+.pill-active {
+  background: var(--bg-pill-active);
+  color: var(--accent);
+  border-color: rgba(62, 166, 255, 0.2);
+  font-weight: 500;
+}
+
+/* Toggle track */
+.toggle-track {
+  width: 44px;
+  height: 26px;
+  border-radius: 13px;
+  padding: 2px;
+  transition: background 0.25s ease;
+  background: rgba(255, 255, 255, 0.08);
+}
+.toggle-track-on {
+  background: var(--accent);
+  box-shadow: 0 0 12px var(--accent-glow);
+}
+.toggle-thumb {
+  width: 22px;
+  height: 22px;
+  border-radius: 11px;
+  background: white;
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
+.toggle-thumb-on {
+  transform: translateX(18px);
+}
+
+/* Fade in animation */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.fade-up {
+  animation: fadeUp 0.4s ease forwards;
+}
+.fade-up-delay-1 { animation-delay: 0.05s; opacity: 0; }
+.fade-up-delay-2 { animation-delay: 0.1s; opacity: 0; }
+.fade-up-delay-3 { animation-delay: 0.15s; opacity: 0; }
+.fade-up-delay-4 { animation-delay: 0.2s; opacity: 0; }
+
+/* Spinner */
+@keyframes spin { to { transform: rotate(360deg); } }
+.spinner {
+  width: 36px;
+  height: 36px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+/* Scrollbar hiding for controls panel */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+input {
+  -webkit-user-select: text;
+  user-select: text;
+}

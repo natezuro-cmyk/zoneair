@@ -2,18 +2,18 @@ import { useState } from 'react'
 import { useUnits } from '../state/units'
 import { UnitClient } from '../lib/unitClient'
 
-type Props = { onDone: () => void; onCancel: () => void }
-
-const DEFAULT_HOST = 'z1air-unit.local'
+type Props = { onComplete: () => void }
 
 type Step = 'connect-ap' | 'finding' | 'name-unit'
 
-export default function AddUnit({ onDone, onCancel }: Props) {
-  const add = useUnits(s => s.add)
+const DEFAULT_HOST = 'z1air-unit.local'
+
+export default function SetupWifi({ onComplete }: Props) {
   const [step, setStep] = useState<Step>('connect-ap')
-  const [location, setLocation] = useState('')
   const [status, setStatus] = useState<string | null>(null)
   const [found, setFound] = useState(false)
+  const [location, setLocation] = useState('')
+  const add = useUnits(s => s.add)
 
   const scanForUnit = async () => {
     setStep('finding')
@@ -39,14 +39,13 @@ export default function AddUnit({ onDone, onCancel }: Props) {
   const addUnit = () => {
     if (!location.trim()) return
     add({ id: crypto.randomUUID(), name: location.trim(), host: DEFAULT_HOST })
-    onDone()
+    onComplete()
   }
 
   return (
     <div className="fade-up">
-      <button onClick={onCancel} className="text-dim text-sm font-light mb-6">← Cancel</button>
-      <div className="text-xl font-medium tracking-tight mb-1">Add a unit</div>
-      <p className="text-mute text-sm font-light mb-8">Connect a new Z1 Air to WiFi.</p>
+      <div className="text-xl font-medium tracking-tight mb-1">Set up your unit</div>
+      <p className="text-mute text-sm font-light mb-8">Connect your Z1 Air to WiFi.</p>
 
       {step === 'connect-ap' && (
         <div className="fade-up fade-up-delay-1">

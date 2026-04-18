@@ -13,7 +13,7 @@ void WsServer::begin() {
 }
 
 void WsServer::pushState(const AcState& s) {
-  StaticJsonDocument<384> doc;
+  StaticJsonDocument<768> doc;
   doc["online"]     = s.valid;
   doc["power"]      = s.power;
   doc["mode"]       = (int)s.mode;
@@ -26,6 +26,22 @@ void WsServer::pushState(const AcState& s) {
   doc["vswing_pos"] = s.vswing_pos;
   doc["display"]    = s.display;
   doc["beep"]       = s.beep;
+  // Extended diagnostics
+  doc["indoor_coil_c"]      = s.indoor_coil_c;
+  doc["outdoor_temp_c"]     = s.outdoor_temp_c;
+  doc["condenser_coil_c"]   = s.condenser_coil_c;
+  doc["discharge_temp_c"]   = s.discharge_temp_c;
+  doc["compressor_hz"]      = s.compressor_hz;
+  doc["outdoor_fan_speed"]  = s.outdoor_fan_speed;
+  doc["indoor_fan_speed"]   = s.indoor_fan_speed;
+  doc["compressor_running"] = s.compressor_running;
+  doc["four_way_valve"]     = s.four_way_valve;
+  doc["antifreeze"]         = s.antifreeze;
+  doc["filter_alert"]       = s.filter_alert;
+  doc["supply_voltage_raw"] = s.supply_voltage_raw;
+  doc["current_draw_raw"]   = s.current_draw_raw;
+  doc["error_code1"]        = s.error_code1;
+  doc["error_code2"]        = s.error_code2;
   String body; serializeJson(doc, body);
   ws.textAll(body);
 }

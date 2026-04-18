@@ -15,6 +15,23 @@ export type AcState = {
   vswing_pos: VSwing
   display: boolean
   beep: boolean
+  // Extended diagnostics
+  indoor_coil_c: number
+  outdoor_temp_c: number
+  condenser_coil_c: number
+  discharge_temp_c: number
+  compressor_hz: number
+  outdoor_fan_speed: number
+  indoor_fan_speed: number
+  compressor_running: boolean
+  four_way_valve: boolean
+  antifreeze: boolean
+  filter_alert: boolean
+  supply_voltage_raw: number
+  current_draw_raw: number
+  // Error code bytes (from frame bytes 20-29, only non-zero during faults)
+  error_code1: number
+  error_code2: number
 }
 
 export type Command = Partial<Pick<AcState,

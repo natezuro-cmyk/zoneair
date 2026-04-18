@@ -315,6 +315,38 @@ bool TclProtocol::parseState(const uint8_t* in, size_t in_len, AcState& state) {
   state.vswing_pos    = vswing_pos;
   // Display & beep are write-only on this AC variant — keep last-sent value
   // (committed by sendSet) so the UI toggle stays stable.
+
+  // ---- Extended diagnostics ----
+  // byte[30]: indoor coil (evaporator) temp. Formula: value * 0.3 - 11.5 (squidpickles)
+  state.indoor_coil_c     = in[30] * 0.3f - 11.5f;
+  // byte[34]: actual indoor fan speed indicator (0=off, ~60=low, ~85=med, ~98=high)
+  state.indoor_fan_speed  = in[34];
+  // byte[35]: outdoor ambient temp. Formula: value - 20 = degrees C
+  state.outdoor_temp_c    = static_cast<float>(in[35]) - 20.0f;
+  // byte[36]: condenser coil temp. Same offset.
+  state.condenser_coil_c  = static_cast<float>(in[36]) - 20.0f;
+  // byte[37]: compressor discharge pipe temp
+  state.discharge_temp_c  = static_cast<float>(in[37]) - 20.0f;
+  // byte[38]: compressor frequency in Hz (0 = stopped)
+  state.compressor_hz     = in[38];
+  // byte[39]: outdoor fan speed
+  state.outdoor_fan_speed = in[39];
+  // byte[40]: compressor running if bits[3:0] == 0x0A
+  state.compressor_running = (in[40] & 0x0F) == 0x0A;
+  // byte[19] bit 7: four-way valve (reversing valve for heat)
+  state.four_way_valve    = (in[19] >> 7) & 0x01;
+  // byte[32] bit 7: antifreeze mode
+  state.antifreeze        = (in[32] >> 7) & 0x01;
+  // byte[50] bit 1: filter needs cleaning
+  state.filter_alert      = (in[50] >> 1) & 0x01;
+  // byte[45]: supply voltage raw
+  state.supply_voltage_raw = in[45];
+  // byte[46]: current draw raw
+  state.current_draw_raw  = in[46];
+  // bytes[20-29]: suspected error/fault codes (always 0 in normal operation)
+  state.error_code1       = in[20];
+  state.error_code2       = in[21];
+
   state.valid         = true;
   return true;
 }

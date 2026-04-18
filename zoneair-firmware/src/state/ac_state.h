@@ -30,8 +30,28 @@ struct AcState {
   bool    off_timer_en;    // byte[7] bit 3 (junkfix comment, untested for LED)
   bool    on_timer_en;     // byte[7] bit 4 (junkfix comment, untested for LED)
   bool    timer_indicator; // byte[10] bit 6 (junkfix's "timerindicator?")
-  uint8_t off_timer_hours; // byte 13, range 0-24, per /Users/Ben/zone-air/bb_protocol.h:204
-  uint8_t on_timer_hours;  // byte 14, range 0-24, per /Users/Ben/zone-air/bb_protocol.h:205
+  uint8_t off_timer_hours; // byte 13, range 0-24
+  uint8_t on_timer_hours;  // byte 14, range 0-24
+
+  // ---- Extended diagnostics (parsed from response bytes 19-50) ----
+  float   indoor_coil_c;     // byte[30]: evaporator coil temp
+  float   outdoor_temp_c;    // byte[35]: outdoor ambient temp
+  float   condenser_coil_c;  // byte[36]: outdoor condenser coil temp
+  float   discharge_temp_c;  // byte[37]: compressor discharge pipe temp
+  uint8_t compressor_hz;     // byte[38]: compressor frequency (0=stopped)
+  uint8_t outdoor_fan_speed; // byte[39]: outdoor fan RPM indicator
+  uint8_t indoor_fan_speed;  // byte[34]: actual indoor fan RPM indicator
+  bool    compressor_running;// byte[40] bits[3:0] == 0x0A
+  bool    four_way_valve;    // byte[19] bit 7: reversing valve (1=heating)
+  bool    antifreeze;        // byte[32] bit 7: 8-degree heater on
+  bool    filter_alert;      // byte[50] bit 1: clean filter needed
+  uint8_t supply_voltage_raw;// byte[45]: raw voltage reading
+  uint8_t current_draw_raw;  // byte[46]: raw current reading
+  // Error/fault codes — bytes 20-29 are always zero in normal operation,
+  // suspected to carry error codes during fault conditions.
+  uint8_t error_code1;       // byte[20]: primary error/fault code (0 = no error)
+  uint8_t error_code2;       // byte[21]: secondary error/sub-code
+
   bool valid;
 };
 

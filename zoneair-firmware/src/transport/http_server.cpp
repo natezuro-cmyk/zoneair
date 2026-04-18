@@ -33,7 +33,7 @@ void HttpServer::begin(const AcState* state, SetCommandHandler on_set) {
   });
 
   server.on("/state", HTTP_GET, [state](AsyncWebServerRequest* req){
-    StaticJsonDocument<384> doc;
+    StaticJsonDocument<768> doc;
     doc["online"]      = state->valid;
     doc["power"]       = state->power;
     doc["mode"]        = (int)state->mode;
@@ -46,6 +46,22 @@ void HttpServer::begin(const AcState* state, SetCommandHandler on_set) {
     doc["vswing_pos"]  = state->vswing_pos;
     doc["display"]     = state->display;
     doc["beep"]        = state->beep;
+    // Extended diagnostics
+    doc["indoor_coil_c"]      = state->indoor_coil_c;
+    doc["outdoor_temp_c"]     = state->outdoor_temp_c;
+    doc["condenser_coil_c"]   = state->condenser_coil_c;
+    doc["discharge_temp_c"]   = state->discharge_temp_c;
+    doc["compressor_hz"]      = state->compressor_hz;
+    doc["outdoor_fan_speed"]  = state->outdoor_fan_speed;
+    doc["indoor_fan_speed"]   = state->indoor_fan_speed;
+    doc["compressor_running"] = state->compressor_running;
+    doc["four_way_valve"]     = state->four_way_valve;
+    doc["antifreeze"]         = state->antifreeze;
+    doc["filter_alert"]       = state->filter_alert;
+    doc["supply_voltage_raw"] = state->supply_voltage_raw;
+    doc["current_draw_raw"]   = state->current_draw_raw;
+    doc["error_code1"]        = state->error_code1;
+    doc["error_code2"]        = state->error_code2;
     String body; serializeJson(doc, body);
     auto* r = req->beginResponse(200, "application/json", body);
     addCors(r); req->send(r);

@@ -121,8 +121,8 @@ void setup() {
     snprintf(ap_name, sizeof(ap_name), "Z1Air-Setup-%02X%02X", mac[4], mac[5]);
     prov.begin(ap_name, [](const String& ssid, const String& pass){
       NvsStore s; s.save(ssid, pass, "unit");
-      Serial.println("[prov] saved, rebooting in 8s");
-      delay(8000);
+      Serial.println("[prov] saved, rebooting in 2s");
+      delay(2000);
       ESP.restart();
     });
     return;

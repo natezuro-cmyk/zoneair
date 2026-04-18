@@ -4,13 +4,19 @@ export default {
   theme: {
     extend: {
       colors: {
-        ink: '#0a0e14',
-        line: '#1a2230',
-        mute: '#7d8896',
+        ink: '#08090c',
+        card: 'rgba(255, 255, 255, 0.04)',
+        line: 'rgba(255, 255, 255, 0.06)',
+        mute: 'rgba(237, 242, 247, 0.45)',
+        dim: 'rgba(237, 242, 247, 0.25)',
         accent: '#3ea6ff',
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
+        sans: ['Outfit', 'system-ui', 'sans-serif'],
+      },
+      borderRadius: {
+        '2xl': '16px',
+        '3xl': '20px',
       },
     },
   },
