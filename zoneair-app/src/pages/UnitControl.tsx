@@ -125,13 +125,16 @@ export default function UnitControl({ unit, onBack, onDetails }: Props) {
 
     const keys = Object.keys(patch) as (keyof AcState)[]
 
-    // Auto-expire optimistic state after 8s so rapid/lost commands don't leave the UI stuck
+    // mode and power wait for the compressor — give them 60s before reverting
+    const timeoutFor = (key: keyof AcState) =>
+      key === 'mode' || key === 'power' ? 60_000 : 8_000
+
     for (const key of keys) {
       clearTimeout(pendingTimers.current[key])
       pendingTimers.current[key] = setTimeout(() => {
         setPending(p => { const n = { ...p }; delete n[key]; return n })
         delete pendingTimers.current[key]
-      }, 8000)
+      }, timeoutFor(key))
     }
 
     client.sendCommand(patch as any).catch(() => {
@@ -198,6 +201,12 @@ export default function UnitControl({ unit, onBack, onDetails }: Props) {
 
   const powerOn = view.power
   const modeLabel = ['Off','Cool','Heat','Auto','Dry','Fan'][view.mode] ?? '—'
+  const startingLabel =
+    'mode' in pending && pending.mode !== state.mode
+      ? pending.mode === 1 ? 'Starting cooling…'
+      : pending.mode === 2 ? 'Starting heat…'
+      : null
+      : null
 
   return (
     <div className="flex flex-col h-full fade-up">
@@ -288,7 +297,7 @@ export default function UnitControl({ unit, onBack, onDetails }: Props) {
           </div>
           <div className="flex items-center gap-3 mt-1">
             <span className="text-xs font-light text-dim tracking-widest uppercase">{indoorF}° inside</span>
-            {powerOn && <span className="text-xs text-accent/70 font-light">· {modeLabel}</span>}
+            {powerOn && <span className="text-xs text-accent/70 font-light">· {startingLabel ?? modeLabel}</span>}
           </div>
         </div>
       </div>
